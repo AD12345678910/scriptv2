@@ -103,8 +103,8 @@
     .small-btn {
       background: #e0e0e0;
       border: none;
-      padding: 5px 12px;
-      border-radius: 4px;
+      padding: 6px 12px;
+      border-radius: 6px;
       font-size: 12px;
       cursor: pointer;
       transition: background 0.2s;
@@ -182,11 +182,8 @@
     }
     .voice-row .name { font-weight: 700; color:#333; }
     .voice-row label { margin-left: 10px; font-size: 14px; cursor:pointer; }
-    .hint {
-      color:#666;
-      margin-top:10px;
-      font-size: 13px;
-    }
+
+    .hint { color:#666; margin-top:10px; font-size: 13px; }
   </style>
 </head>
 
@@ -194,21 +191,30 @@
   <div class="container">
     <div class="header">
       <h1>🎭 Script Rehearsal Tool</h1>
-      <p>Upload a script PDF → auto-parse → choose voices → rehearse</p>
+      <p>Upload a script PDF (slow) or script_data.json (fast) → choose voices → rehearse</p>
     </div>
 
     <div class="content">
       <!-- Upload -->
       <div id="uploadSection" class="upload-section">
-        <h2 style="margin-bottom: 14px;">Upload Your Script (PDF)</h2>
+        <h2 style="margin-bottom: 14px;">Upload Your Script</h2>
         <p style="margin-bottom: 18px; color:#666;">
-          Upload a text-based PDF. If your PDF is scanned/image-based, parsing may fail (you may need OCR).
+          Upload a <b>PDF</b> (we’ll parse it with Gemini) or upload <b>script_data.json</b> directly for faster loading.
         </p>
-        <input type="file" id="fileInput" accept=".pdf"/>
-        <label for="fileInput" class="upload-btn">Choose PDF</label>
+        <input type="file" id="fileInput" accept=".pdf,.json"/>
+        <label for="fileInput" class="upload-btn">Choose PDF or JSON</label>
         <p id="fileName" style="margin-top: 15px; color:#666;"></p>
+
+        <!-- Download JSON (shown only after successful PDF parse) -->
+        <div id="downloadJsonBox" class="hidden" style="margin-top:16px;">
+          <button class="small-btn" onclick="downloadCurrentJson()">⬇ Download script_data.json</button>
+          <div class="hint" style="margin-top:8px;">
+            Tip: Next time, upload the JSON directly to skip PDF parsing and load instantly.
+          </div>
+        </div>
+
         <div class="hint">
-          Backend expected at <b>http://localhost:8000</b> (run <code>uvicorn server:app --reload --port 8000</code>)
+          PDF parsing uses a backend expected at <b>http://localhost:8000</b>
         </div>
       </div>
 
@@ -288,51 +294,81 @@
     let availableVoices = [];
 
     // ====== Voices: load asynchronously (browser-dependent) ======
-    function loadVoices() {
-      availableVoices = speechSynthesis.getVoices();
-    }
+    function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
     loadVoices();
     if (speechSynthesis.onvoiceschanged !== undefined) {
       speechSynthesis.onvoiceschanged = loadVoices;
     }
 
-    // ====== Upload PDF -> backend parse ======
+    // ====== Upload handler: accept PDF or JSON ======
     document.getElementById('fileInput').addEventListener('change', async function(e) {
       const file = e.target.files[0];
       if (!file) return;
 
-      document.getElementById('fileName').textContent = `Uploading ${file.name}...`;
-      updateStatus("Uploading PDF…", "playing");
+      // reset download box each upload
+      document.getElementById('downloadJsonBox').classList.add('hidden');
 
-      const formData = new FormData();
-      formData.append("file", file);
+      const name = file.name.toLowerCase();
 
-      try {
-        const res = await fetch(`${API_BASE}/api/parse-pdf`, {
-          method: "POST",
-          body: formData
-        });
+      // JSON path: no backend needed
+      if (name.endsWith(".json")) {
+        document.getElementById('fileName').textContent = `Loading ${file.name}...`;
+        updateStatus("Loading JSON…", "playing");
 
-        const data = await res.json();
-
-        if (!data.ok) {
-          updateStatus(data.message || "Could not parse PDF.", "error");
-          document.getElementById('fileName').textContent = `✗ ${data.message || "Error"}`;
-          // keep upload visible so they can try again
-          return;
-        }
-
-        scriptData = data.script_data;
-        charactersList = data.characters || [];
-        document.getElementById('fileName').textContent = `✓ Parsed ${file.name} (${data.total_lines || ""} lines)`;
-
-        // Move to voice selection
-        showVoicePicker(charactersList);
-
-      } catch (err) {
-        updateStatus("Server error. Is the backend running on localhost:8000?", "error");
-        document.getElementById('fileName').textContent = "✗ Server error";
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          try {
+            scriptData = JSON.parse(evt.target.result);
+            charactersList = extractCharactersFromScriptData(scriptData);
+            document.getElementById('fileName').textContent = `✓ Loaded ${file.name}`;
+            showVoicePicker(charactersList);
+          } catch (err) {
+            updateStatus("Error parsing JSON file. Please upload a valid script_data.json.", "error");
+            document.getElementById('fileName').textContent = `✗ Invalid JSON`;
+          }
+        };
+        reader.readAsText(file);
+        return;
       }
+
+      // PDF path: backend required
+      if (name.endsWith(".pdf")) {
+        document.getElementById('fileName').textContent = `Uploading ${file.name}...`;
+        updateStatus("Uploading PDF…", "playing");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const res = await fetch(`${API_BASE}/api/parse-pdf`, { method: "POST", body: formData });
+          const data = await res.json();
+
+          if (!data.ok) {
+            updateStatus(data.message || "Could not parse PDF.", "error");
+            document.getElementById('fileName').textContent = `✗ ${data.message || "Error"}`;
+            return;
+          }
+
+          scriptData = data.script_data;
+          charactersList = data.characters || extractCharactersFromScriptData(scriptData);
+
+          document.getElementById('fileName').textContent = `✓ Parsed ${file.name} (${data.total_lines || ""} lines)`;
+
+          // show download + tip
+          document.getElementById('downloadJsonBox').classList.remove('hidden');
+
+          showVoicePicker(charactersList);
+
+        } catch (err) {
+          updateStatus("Server error. Is the backend running on localhost:8000?", "error");
+          document.getElementById('fileName').textContent = "✗ Server error";
+        }
+        return;
+      }
+
+      // unsupported
+      updateStatus("Please upload a .pdf or .json file.", "error");
+      document.getElementById('fileName').textContent = "✗ Unsupported file type";
     });
 
     // ====== Speed control ======
@@ -342,16 +378,11 @@
 
     // ====== Screen transitions ======
     function showVoicePicker(characters) {
-      // Hide upload; show voice section
       document.getElementById('uploadSection').classList.add('hidden');
       document.getElementById('mainSection').classList.add('hidden');
       document.getElementById('voiceSection').classList.remove('hidden');
 
-      // default genders
-      characters.forEach(c => {
-        if (!characterGender[c]) characterGender[c] = "female";
-      });
-
+      characters.forEach(c => { if (!characterGender[c]) characterGender[c] = "female"; });
       renderVoicePicker();
       updateStatus("Choose voices, then continue.", "ready");
     }
@@ -377,9 +408,7 @@
           </div>
         `;
         row.querySelectorAll(`input[name="gender-${cssSafe(c)}"]`).forEach(r => {
-          r.addEventListener("change", (e) => {
-            characterGender[c] = e.target.value;
-          });
+          r.addEventListener("change", (e) => { characterGender[c] = e.target.value; });
         });
 
         list.appendChild(row);
@@ -395,7 +424,7 @@
       document.getElementById('voiceSection').classList.add('hidden');
       document.getElementById('mainSection').classList.remove('hidden');
 
-      populateScriptUI(); // build scene + character checkboxes from scriptData
+      populateScriptUI();
       updateStatus("Ready to rehearse.", "ready");
     }
 
@@ -500,7 +529,6 @@
           if (selectedCharacters.has(lineData.character)) {
             await speakLine(lineData.line, lineData.character);
           } else {
-            // Pause for user
             const words = (lineData.line || "").split(/\s+/).filter(Boolean).length;
             const pauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
             await sleep(pauseTime);
@@ -534,11 +562,9 @@
       const explicit = voices.find(v => (v.name || "").toLowerCase().includes(keyword));
       if (explicit) return explicit;
 
-      // Prefer English voices if possible
       const en = voices.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
       const pool = en.length ? en : voices;
 
-      // Simple stable selection
       if (gender === "female") return pool[0] || voices[0];
       return pool[1] || pool[0] || voices[0];
     }
@@ -589,13 +615,39 @@
 
     function updateStatus(message, type) {
       const status = document.getElementById('status');
-      // status element exists only on main screen; but safe to update anyway
       if (!status) return;
       status.textContent = message;
       status.className = `status ${type}`;
     }
 
-    // ====== Helpers: basic escaping for safety ======
+    // ====== JSON helpers ======
+    function extractCharactersFromScriptData(data) {
+      const s = new Set();
+      (data.scenes || []).forEach(scene => {
+        (scene.lines || []).forEach(line => {
+          if (line.character) s.add(line.character);
+        });
+      });
+      return Array.from(s).sort();
+    }
+
+    function downloadCurrentJson() {
+      if (!scriptData) return;
+
+      const blob = new Blob([JSON.stringify(scriptData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "script_data.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    // ====== Helpers: basic escaping ======
     function escapeHtml(str) {
       return String(str)
         .replaceAll("&", "&amp;")
@@ -605,11 +657,9 @@
         .replaceAll("'", "&#039;");
     }
     function escapeAttr(str) {
-      // minimal for attribute usage
       return escapeHtml(str).replaceAll(" ", "_");
     }
     function cssSafe(str) {
-      // used for IDs / radio name keys
       return String(str).replace(/[^a-zA-Z0-9_-]/g, "_");
     }
   </script>
