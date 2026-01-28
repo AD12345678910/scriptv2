@@ -1,207 +1,702 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Script Rehearsal Tool</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Script Rehearsal Tool</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 { font-size: 32px; margin-bottom: 10px; }
+    .header p { opacity: 0.9; font-size: 16px; }
+    .content { padding: 30px; }
 
-<style>
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  background: linear-gradient(135deg,#667eea,#764ba2);
-  min-height:100vh;
-  margin:0;
-  padding:20px;
-}
-.container {
-  max-width:1100px;
-  margin:auto;
-  background:white;
-  border-radius:16px;
-  overflow:hidden;
-}
-.header {
-  padding:30px;
-  text-align:center;
-  color:white;
-  background:linear-gradient(135deg,#667eea,#764ba2);
-}
-.content { padding:30px; }
-.hidden { display:none; }
+    .upload-section {
+      text-align: center;
+      padding: 40px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .upload-section input[type="file"] { display: none; }
+    .upload-btn {
+      background: #667eea;
+      color: white;
+      padding: 15px 40px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-block;
+    }
+    .upload-btn:hover { background:#5568d3; transform: translateY(-2px); }
 
-.upload {
-  text-align:center;
-  padding:40px;
-  background:#f5f6fa;
-  border-radius:12px;
-}
-button {
-  padding:12px 24px;
-  border-radius:8px;
-  border:none;
-  background:#667eea;
-  color:white;
-  cursor:pointer;
-}
-button:disabled { opacity:0.5; cursor:not-allowed; }
+    .hidden { display: none; }
 
-.voice-row {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:10px;
-  border-bottom:1px solid #eee;
-}
-select { padding:6px; }
+    .status {
+      text-align: center;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .status.ready { background: #e3f2fd; color: #1976d2; }
+    .status.playing { background: #fff3e0; color: #f57c00; }
+    .status.complete { background: #e8f5e9; color: #388e3c; }
+    .status.error { background: #ffebee; color: #d32f2f; }
 
-.line {
-  margin-top:20px;
-  font-size:18px;
-}
-.character { font-weight:700; color:#667eea; }
+    .speed-control {
+      text-align: center;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .speed-control label { font-weight: 500; margin-right: 10px; }
+    .speed-control input[type="range"] { width: 200px; vertical-align: middle; }
+    .speed-control span { margin-left: 10px; font-weight: bold; color: #667eea; }
 
-.controls { margin-top:20px; text-align:center; }
-</style>
+    .selection-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    @media (max-width: 768px) {
+      .selection-container { grid-template-columns: 1fr; }
+    }
+    .selection-box {
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 20px;
+      background: #fafafa;
+    }
+    .selection-box h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .button-group { display:flex; gap:10px; }
+    .small-btn {
+      background: #e0e0e0;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .small-btn:hover:not(:disabled) { background:#d0d0d0; }
+    .small-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .checkbox-container {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 10px;
+      background: white;
+      border-radius: 8px;
+    }
+    .checkbox-item {
+      padding: 10px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .checkbox-item:last-child { border-bottom: none; }
+    .checkbox-item input[type="checkbox"] { width: 18px; height: 18px; cursor:pointer; }
+    .checkbox-item label { cursor:pointer; flex:1; font-size: 14px; }
+
+    .controls { text-align:center; margin-bottom: 30px; }
+    .control-btn {
+      padding: 15px 40px;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      margin: 0 10px;
+      transition: all 0.3s;
+      font-weight: 600;
+    }
+    .play-btn { background:#4CAF50; color:white; }
+    .play-btn:hover:not(:disabled) { background:#45a049; transform: translateY(-2px); }
+    .stop-btn { background:#f44336; color:white; }
+    .stop-btn:hover:not(:disabled) { background:#da190b; transform: translateY(-2px); }
+    .control-btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    .line-display {
+      background: #f5f5f5;
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 25px;
+      min-height: 120px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .line-display .character {
+      font-weight: bold;
+      color: #667eea;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .line-display .line-text { color:#333; }
+
+    /* Voice Picker */
+    .voice-section {
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .voice-row {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      background:white;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #eee;
+    }
+    .voice-row .name { font-weight: 700; color:#333; }
+    .voice-row label { margin-left: 10px; font-size: 14px; cursor:pointer; }
+
+    .hint { color:#666; margin-top:10px; font-size: 13px; }
+  </style>
 </head>
 
 <body>
-<div class="container">
-  <div class="header">
-    <h1>🎭 Script Rehearsal Tool</h1>
-    <p>Upload JSON → choose voices → rehearse</p>
+  <div class="container">
+    <div class="header">
+      <h1>🎭 Script Rehearsal Tool</h1>
+      <p>Upload a script PDF (slow) or script_data.json (fast) → choose voices → rehearse</p>
+    </div>
+
+    <div class="content">
+      <!-- Upload -->
+      <div id="uploadSection" class="upload-section">
+        <h2 style="margin-bottom: 14px;">Upload Your Script</h2>
+        <p style="margin-bottom: 18px; color:#666;">
+          Upload a <b>PDF</b> (we’ll parse it) or upload <b>script_data.json</b> directly for faster loading.
+        </p>
+        <input type="file" id="fileInput" accept=".pdf,.json"/>
+        <label for="fileInput" class="upload-btn">Choose PDF or JSON</label>
+        <p id="fileName" style="margin-top: 15px; color:#666;"></p>
+
+        <!-- ALWAYS visible download -->
+        <div id="downloadJsonBox" style="margin-top:16px;">
+          <button id="downloadJsonBtn" class="small-btn" type="button" disabled>
+            ⬇ Download script_data.json
+          </button>
+          <div id="downloadJsonHint" class="hint" style="margin-top:8px;">
+            Upload a PDF or JSON first to enable download.
+          </div>
+        </div>
+
+        <div class="hint">
+          PDF parsing backend: <b id="backendUrl"></b>
+        </div>
+
+        <div class="hint"><b>BUILD:</b> rehearsal+download+render</div>
+      </div>
+
+      <!-- Voice selection -->
+      <div id="voiceSection" class="voice-section hidden">
+        <h2 style="margin-bottom: 10px;">Choose voices</h2>
+        <p style="margin-bottom: 15px; color:#666;">
+          Pick male/female for each character. (Your device’s available voices vary.)
+        </p>
+        <div style="text-align:center; margin-bottom:12px;">
+          <button class="small-btn" type="button" onclick="setAllGenders('female')">All Female</button>
+          <button class="small-btn" type="button" onclick="setAllGenders('male')">All Male</button>
+        </div>
+        <div id="voiceList"></div>
+        <div style="margin-top: 15px; text-align:center;">
+          <button class="control-btn play-btn" type="button" onclick="confirmVoices()">Continue</button>
+        </div>
+      </div>
+
+      <!-- Main rehearsal UI -->
+      <div id="mainSection" class="hidden">
+        <div class="speed-control">
+          <label for="speedSlider">Speech Speed:</label>
+          <input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1.0"/>
+          <span id="speedValue">1.0x</span>
+        </div>
+
+        <div class="selection-container">
+          <div class="selection-box">
+            <h3>
+              Select Scenes
+              <div class="button-group">
+                <button class="small-btn" type="button" onclick="selectAllScenes()">All</button>
+                <button class="small-btn" type="button" onclick="deselectAllScenes()">None</button>
+              </div>
+            </h3>
+            <div class="checkbox-container" id="sceneCheckboxes"></div>
+          </div>
+
+          <div class="selection-box">
+            <h3>
+              Characters to Speak
+              <div class="button-group">
+                <button class="small-btn" type="button" onclick="selectAllCharacters()">All</button>
+                <button class="small-btn" type="button" onclick="deselectAllCharacters()">None</button>
+              </div>
+            </h3>
+            <div class="checkbox-container" id="characterCheckboxes"></div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="control-btn play-btn" id="playBtn" type="button" onclick="startRehearsal()">▶ Start Rehearsal</button>
+          <button class="control-btn stop-btn" id="stopBtn" type="button" onclick="stopRehearsal()" disabled>⏹ Stop</button>
+        </div>
+
+        <div class="status ready" id="status">Ready to rehearse</div>
+
+        <div class="line-display" id="lineDisplay">
+          <div style="text-align:center; color:#999;">Select scenes and press Start to begin</div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="content">
+  <script>
+    // ====== Config ======
+    const API_BASE = "https://scriptv2.onrender.com";
+    window.API_BASE = API_BASE;
+    document.getElementById("backendUrl").textContent = API_BASE;
 
-    <!-- UPLOAD -->
-    <div id="upload" class="upload">
-      <input type="file" id="fileInput" accept=".json"/>
-      <br><br>
-      <button onclick="fileInput.click()">Choose script_data.json</button>
-      <p id="fileStatus"></p>
-    </div>
+    // ====== App State ======
+    let scriptData = null;
+    let charactersList = [];
+    let characterGender = {}; // { "SELBY": "female", ... }
+    let isPlaying = false;
+    const speechSynthesis = window.speechSynthesis;
+    let currentUtterance = null;
+    let availableVoices = [];
 
-    <!-- VOICE PICKER -->
-    <div id="voicePicker" class="hidden">
-      <h2>Choose voices per character</h2>
-      <div id="voiceList"></div>
-      <div class="controls">
-        <button onclick="start()">Start Rehearsal</button>
-      </div>
-    </div>
+    // ====== Voices: load asynchronously (browser-dependent) ======
+    function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
 
-    <!-- REHEARSAL -->
-    <div id="rehearsal" class="hidden">
-      <div class="line">
-        <div class="character" id="char"></div>
-        <div id="text"></div>
-      </div>
-      <div class="controls">
-        <button onclick="stop()">Stop</button>
-      </div>
-    </div>
+    // ====== Helpers: escaping ======
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+    function escapeAttr(str) {
+      // for IDs only (safe CSS-ish)
+      return String(str).replace(/[^a-zA-Z0-9_-]/g, "_");
+    }
+    function attrValue(str) {
+      // for value="..." attributes: DO NOT change characters, only escape HTML
+      return escapeHtml(str);
+    }
 
-  </div>
-</div>
+    // ====== Download button state ======
+    function updateDownloadButton() {
+      const btn = document.getElementById("downloadJsonBtn");
+      const hint = document.getElementById("downloadJsonHint");
+      const ready = !!scriptData;
 
-<script>
-let scriptData;
-let characters = [];
-let voices = [];
-let voiceMap = {};
-let playing = false;
-const synth = window.speechSynthesis;
+      btn.disabled = !ready;
+      btn.style.opacity = ready ? "1" : "0.5";
+      hint.textContent = ready
+        ? "Downloads JSON (upload it next time to skip PDF parsing)."
+        : "Upload a PDF (we convert it) or upload JSON directly.";
+    }
 
-function loadVoices() {
-  voices = synth.getVoices();
-}
-loadVoices();
-if (speechSynthesis.onvoiceschanged !== undefined) {
-  speechSynthesis.onvoiceschanged = loadVoices;
-}
-
-/* ========= UPLOAD ========= */
-fileInput.onchange = e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = ev => {
-    scriptData = JSON.parse(ev.target.result);
-    extractCharacters();
-    buildVoicePicker();
-    upload.classList.add("hidden");
-    voicePicker.classList.remove("hidden");
-    fileStatus.textContent = "Loaded ✔";
-  };
-  reader.readAsText(file);
-};
-
-/* ========= CHARACTERS ========= */
-function extractCharacters() {
-  const set = new Set();
-  scriptData.scenes.forEach(s =>
-    s.lines.forEach(l => l.character && set.add(l.character))
-  );
-  characters = [...set];
-}
-
-/* ========= VOICE PICKER ========= */
-function buildVoicePicker() {
-  voiceList.innerHTML = "";
-  characters.forEach(c => {
-    const row = document.createElement("div");
-    row.className = "voice-row";
-
-    const label = document.createElement("div");
-    label.textContent = c;
-
-    const select = document.createElement("select");
-    voices.forEach(v => {
-      const opt = document.createElement("option");
-      opt.value = v.name;
-      opt.textContent = `${v.name} (${v.lang})`;
-      select.appendChild(opt);
+    document.getElementById("downloadJsonBtn").addEventListener("click", () => {
+      if (!scriptData) return;
+      downloadCurrentJson();
     });
 
-    voiceMap[c] = voices[0]?.name;
-    select.onchange = e => voiceMap[c] = e.target.value;
+    // ====== Upload handler: accept PDF or JSON ======
+    document.getElementById('fileInput').addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    row.append(label, select);
-    voiceList.appendChild(row);
-  });
-}
+      const name = file.name.toLowerCase();
 
-/* ========= REHEARSAL ========= */
-async function start() {
-  voicePicker.classList.add("hidden");
-  rehearsal.classList.remove("hidden");
-  playing = true;
+      // reset state
+      scriptData = null;
+      charactersList = [];
+      updateDownloadButton();
 
-  for (const scene of scriptData.scenes) {
-    for (const line of scene.lines) {
-      if (!playing) return;
-      char.textContent = line.character;
-      text.textContent = line.line;
-      await speak(line.character, line.line);
+      document.getElementById('fileName').textContent = `Loading ${file.name}...`;
+
+      // JSON path: no backend needed
+      if (name.endsWith(".json")) {
+        updateStatus("Loading JSON…", "playing");
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          try {
+            scriptData = JSON.parse(evt.target.result);
+            charactersList = extractCharactersFromScriptData(scriptData);
+
+            document.getElementById('fileName').textContent = `✓ Loaded ${file.name}`;
+            updateStatus("JSON loaded. Choose voices.", "ready");
+            updateDownloadButton();
+
+            showVoicePicker(charactersList);
+          } catch (err) {
+            updateStatus("Error parsing JSON file. Please upload a valid script_data.json.", "error");
+            document.getElementById('fileName').textContent = `✗ Invalid JSON`;
+          }
+        };
+        reader.readAsText(file);
+        return;
+      }
+
+      // PDF path: backend required
+      if (name.endsWith(".pdf")) {
+        updateStatus("Uploading PDF…", "playing");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const res = await fetch(`${API_BASE}/api/parse-pdf`, { method: "POST", body: formData });
+          const data = await res.json();
+
+          if (!data.ok) {
+            updateStatus(data.message || "Could not parse PDF.", "error");
+            document.getElementById('fileName').textContent = `✗ ${data.message || "Error"}`;
+            return;
+          }
+
+          scriptData = data.script_data;
+          charactersList = data.characters || extractCharactersFromScriptData(scriptData);
+
+          document.getElementById('fileName').textContent = `✓ Parsed ${file.name} (${data.total_lines || ""} lines)`;
+
+          updateDownloadButton();
+          updateStatus("PDF parsed. Choose voices.", "ready");
+
+          showVoicePicker(charactersList);
+        } catch (err) {
+          updateStatus("Server error. Backend/CORS issue.", "error");
+          document.getElementById('fileName').textContent = "✗ Server error";
+        }
+        return;
+      }
+
+      updateStatus("Please upload a .pdf or .json file.", "error");
+      document.getElementById('fileName').textContent = "✗ Unsupported file type";
+    });
+
+    // ====== Speed control ======
+    document.getElementById('speedSlider').addEventListener('input', function(e) {
+      document.getElementById('speedValue').textContent = e.target.value + 'x';
+    });
+
+    // ====== Screen transitions ======
+    function showVoicePicker(characters) {
+      document.getElementById('uploadSection').classList.add('hidden');
+      document.getElementById('mainSection').classList.add('hidden');
+      document.getElementById('voiceSection').classList.remove('hidden');
+
+      characters.forEach(c => { if (!characterGender[c]) characterGender[c] = "female"; });
+      renderVoicePicker();
+      updateStatus("Choose voices, then continue.", "ready");
     }
-  }
-}
 
-function stop() {
-  playing = false;
-  synth.cancel();
-}
+    function renderVoicePicker() {
+      const list = document.getElementById("voiceList");
+      list.innerHTML = "";
 
-function speak(character, textLine) {
-  return new Promise(resolve => {
-    const u = new SpeechSynthesisUtterance(textLine);
-    const v = voices.find(v => v.name === voiceMap[character]);
-    if (v) u.voice = v;
-    u.onend = resolve;
-    synth.speak(u);
-  });
-}
-</script>
+      charactersList.forEach(c => {
+        const row = document.createElement("div");
+        row.className = "voice-row";
+        row.innerHTML = `
+          <div class="name">${escapeHtml(c)}</div>
+          <div>
+            <label>
+              <input type="radio" name="gender-${escapeAttr(c)}" value="female" ${characterGender[c]==="female" ? "checked" : ""}>
+              Female
+            </label>
+            <label>
+              <input type="radio" name="gender-${escapeAttr(c)}" value="male" ${characterGender[c]==="male" ? "checked" : ""}>
+              Male
+            </label>
+          </div>
+        `;
+
+        row.querySelectorAll(`input[name="gender-${escapeAttr(c)}"]`).forEach(r => {
+          r.addEventListener("change", (e) => { characterGender[c] = e.target.value; });
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    function setAllGenders(g) {
+      charactersList.forEach(c => characterGender[c] = g);
+      renderVoicePicker();
+    }
+
+    function confirmVoices() {
+      document.getElementById('voiceSection').classList.add('hidden');
+      document.getElementById('mainSection').classList.remove('hidden');
+
+      populateScriptUI();
+      updateStatus("Ready to rehearse.", "ready");
+    }
+
+    // ====== Build scene + character checkboxes ======
+    function populateScriptUI() {
+      if (!scriptData || !scriptData.scenes) {
+        updateStatus("No script data loaded.", "error");
+        return;
+      }
+
+      // Scenes
+      const sceneContainer = document.getElementById('sceneCheckboxes');
+      sceneContainer.innerHTML = '';
+      scriptData.scenes.forEach(scene => {
+        const sceneNum = String(scene.scene_number ?? "");
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+        div.innerHTML = `
+          <input type="checkbox" id="scene-${escapeAttr(sceneNum)}" value="${attrValue(sceneNum)}">
+          <label for="scene-${escapeAttr(sceneNum)}">Scene ${escapeHtml(sceneNum)}: ${escapeHtml(scene.scene_title ?? "")}</label>
+        `;
+        sceneContainer.appendChild(div);
+      });
+
+      // Characters
+      const characterSet = new Set();
+      scriptData.scenes.forEach(scene => {
+        (scene.lines || []).forEach(line => {
+          if (line.character) characterSet.add(String(line.character));
+        });
+      });
+
+      const allCharacters = Array.from(characterSet).sort();
+
+      const characterContainer = document.getElementById('characterCheckboxes');
+      characterContainer.innerHTML = '';
+
+      allCharacters.forEach(character => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+        const safe = escapeAttr(character);
+        div.innerHTML = `
+          <input type="checkbox" id="char-${safe}" value="${attrValue(character)}" checked>
+          <label for="char-${safe}">${escapeHtml(character)}</label>
+        `;
+        characterContainer.appendChild(div);
+      });
+    }
+
+    // ====== Select all/none ======
+    function selectAllScenes() {
+      document.querySelectorAll('#sceneCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = true);
+    }
+    function deselectAllScenes() {
+      document.querySelectorAll('#sceneCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+    }
+    function selectAllCharacters() {
+      document.querySelectorAll('#characterCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = true);
+    }
+    function deselectAllCharacters() {
+      document.querySelectorAll('#characterCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+    }
+
+    // ====== Rehearsal loop ======
+    async function startRehearsal() {
+      const selectedScenes = Array.from(document.querySelectorAll('#sceneCheckboxes input:checked')).map(cb => cb.value);
+      if (selectedScenes.length === 0) {
+        updateStatus('Please select at least one scene', 'error');
+        return;
+      }
+
+      const selectedCharacters = new Set(
+        Array.from(document.querySelectorAll('#characterCheckboxes input:checked')).map(cb => cb.value)
+      );
+
+      isPlaying = true;
+      document.getElementById('playBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+
+      const scenesToPlay = scriptData.scenes.filter(scene => selectedScenes.includes(String(scene.scene_number)));
+
+      let lineCounter = 0;
+      const totalLines = scenesToPlay.reduce((sum, scene) => sum + (scene.lines || []).length, 0);
+
+      for (const scene of scenesToPlay) {
+        if (!isPlaying) break;
+
+        updateLineDisplay(`Scene ${scene.scene_number}`, scene.scene_title);
+        updateStatus(`Starting Scene ${scene.scene_number}`, 'playing');
+        await sleep(1500);
+
+        for (const lineData of (scene.lines || [])) {
+          if (!isPlaying) break;
+
+          lineCounter++;
+          const ch = String(lineData.character ?? "");
+          const ln = String(lineData.line ?? "");
+
+          updateLineDisplay(ch, ln);
+          updateStatus(`Scene ${scene.scene_number} | Line ${lineCounter}/${totalLines}`, 'playing');
+
+          if (selectedCharacters.has(ch)) {
+            await speakLine(ln, ch);
+          } else {
+            const words = ln.split(/\s+/).filter(Boolean).length;
+            const pauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
+            await sleep(pauseTime);
+          }
+        }
+      }
+
+      if (isPlaying) updateStatus('Rehearsal complete!', 'complete');
+      else updateStatus('Rehearsal stopped', 'ready');
+
+      stopRehearsal();
+    }
+
+    function stopRehearsal() {
+      isPlaying = false;
+      document.getElementById('playBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+
+      if (currentUtterance) {
+        speechSynthesis.cancel();
+        currentUtterance = null;
+      }
+    }
+
+    // ====== Pick voice ======
+    function pickVoiceForGender(gender) {
+      const voices = (availableVoices && availableVoices.length) ? availableVoices : speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+
+      const keyword = (gender === "female") ? "female" : "male";
+      const explicit = voices.find(v => (v.name || "").toLowerCase().includes(keyword));
+      if (explicit) return explicit;
+
+      const en = voices.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
+      const pool = en.length ? en : voices;
+
+      if (gender === "female") return pool[0] || voices[0];
+      return pool[1] || pool[0] || voices[0];
+    }
+
+    function speakLine(text, character) {
+      return new Promise((resolve) => {
+        if (!isPlaying) return resolve();
+
+        currentUtterance = new SpeechSynthesisUtterance(text || "");
+        const speed = parseFloat(document.getElementById('speedSlider').value);
+        currentUtterance.rate = speed;
+
+        const gender = characterGender[character] || "female";
+        const voice = pickVoiceForGender(gender);
+        if (voice) currentUtterance.voice = voice;
+
+        currentUtterance.onend = () => { currentUtterance = null; resolve(); };
+        currentUtterance.onerror = () => { currentUtterance = null; resolve(); };
+
+        speechSynthesis.speak(currentUtterance);
+      });
+    }
+
+    // ====== Sleep ======
+    function sleep(ms) {
+      return new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isPlaying) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve();
+        }, ms);
+      });
+    }
+
+    function updateLineDisplay(character, line) {
+      const display = document.getElementById('lineDisplay');
+      display.innerHTML = `
+        <div class="character">${escapeHtml(character || "")}</div>
+        <div class="line-text">${escapeHtml(line || "")}</div>
+      `;
+    }
+
+    function updateStatus(message, type) {
+      const status = document.getElementById('status');
+      if (!status) return;
+      status.textContent = message;
+      status.className = `status ${type}`;
+    }
+
+    // ====== JSON helpers ======
+    function extractCharactersFromScriptData(data) {
+      const s = new Set();
+      (data.scenes || []).forEach(scene => {
+        (scene.lines || []).forEach(line => {
+          if (line.character) s.add(String(line.character));
+        });
+      });
+      return Array.from(s).sort();
+    }
+
+    function downloadCurrentJson() {
+      if (!scriptData) return;
+
+      const blob = new Blob([JSON.stringify(scriptData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "script_data.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    // init
+    updateDownloadButton();
+  </script>
 </body>
 </html>
