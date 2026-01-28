@@ -101,12 +101,138 @@
 
         <p id="fileName" style="margin-top:15px; color:#666;"></p>
 
-        <!-- Always-visible download -->
         <div id="downloadJsonBox" style="margin-top:16px;">
-          <button
-            id="downloadJsonBtn"
-            class="small-btn"
-            type="button"
-            disabled
-          >
-            ⬇ Download scrip
+          <button id="downloadJsonBtn" class="small-btn" type="button" disabled>
+            ⬇ Download script_data.json
+          </button>
+          <div id="downloadJsonHint" class="hint">
+            Upload a PDF or JSON first to enable download.
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:14px;">
+          PDF parsing backend: <b id="backendUrl"></b>
+        </div>
+
+        <div class="hint">
+          <b>BUILD:</b> root-index-updated
+        </div>
+      </div>
+
+      <div id="status" class="status ready">Waiting for script upload</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== CONFIG =====
+    const API_BASE = "https://scriptv2.onrender.com";
+    window.API_BASE = API_BASE; // verify in console
+
+    // ===== STATE =====
+    let scriptData = null;
+
+    // ===== DOM =====
+    const fileInput = document.getElementById("fileInput");
+    const fileNameEl = document.getElementById("fileName");
+    const downloadBtn = document.getElementById("downloadJsonBtn");
+    const downloadHint = document.getElementById("downloadJsonHint");
+    const statusEl = document.getElementById("status");
+    const backendUrlEl = document.getElementById("backendUrl");
+
+    backendUrlEl.textContent = API_BASE;
+
+    function updateStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = `status ${type}`;
+    }
+
+    function updateDownloadButton() {
+      const ready = !!scriptData;
+      downloadBtn.disabled = !ready;
+      downloadBtn.style.opacity = ready ? "1" : "0.5";
+      downloadHint.textContent = ready
+        ? "Downloads the JSON version (upload it next time to skip PDF parsing)."
+        : "Upload a PDF (we convert it) or upload JSON directly.";
+    }
+
+    function downloadCurrentJson() {
+      if (!scriptData) return;
+
+      const blob = new Blob([JSON.stringify(scriptData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "script_data.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    downloadBtn.addEventListener("click", downloadCurrentJson);
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      scriptData = null;
+      updateDownloadButton();
+
+      const name = file.name.toLowerCase();
+      fileNameEl.textContent = `Loading ${file.name}...`;
+
+      // JSON path
+      if (name.endsWith(".json")) {
+        updateStatus("Loading JSON…", "playing");
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            scriptData = JSON.parse(evt.target.result);
+            updateStatus("JSON loaded successfully", "ready");
+            fileNameEl.textContent = `✓ Loaded ${file.name}`;
+            updateDownloadButton();
+          } catch (err) {
+            updateStatus("Invalid JSON file", "error");
+            fileNameEl.textContent = `✗ Invalid JSON`;
+          }
+        };
+        reader.readAsText(file);
+        return;
+      }
+
+      // PDF path
+      if (name.endsWith(".pdf")) {
+        updateStatus("Uploading & parsing PDF…", "playing");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const res = await fetch(`${API_BASE}/api/parse-pdf`, { method: "POST", body: formData });
+          const data = await res.json();
+
+          if (!data || !data.ok) {
+            throw new Error((data && data.message) ? data.message : "Parse failed");
+          }
+
+          scriptData = data.script_data;
+          updateStatus("PDF parsed and converted to JSON", "ready");
+          fileNameEl.textContent = `✓ Parsed ${file.name}`;
+          updateDownloadButton();
+        } catch (err) {
+          updateStatus(`PDF parsing failed: ${err.message || "backend error"}`, "error");
+          fileNameEl.textContent = `✗ Parse failed`;
+        }
+        return;
+      }
+
+      updateStatus("Unsupported file type", "error");
+      fileNameEl.textContent = `✗ Unsupported file`;
+    });
+
+    updateDownloadButton();
+  </script>
+</body>
+</html>
