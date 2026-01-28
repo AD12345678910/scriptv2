@@ -229,6 +229,15 @@
         <p style="margin-bottom: 15px; color:#666;">
           Pick male/female for each character. (Your device’s available voices vary.)
         </p>
+        <!-- Download JSON (recommended) -->
+      <div id="downloadJsonBoxVoice" style="margin: 10px 0 16px; text-align:center;">
+        <button class="small-btn" type="button" onclick="downloadCurrentJson()">
+          ⬇ Download script_data.json (recommended)
+        </button>
+        <div class="hint" style="margin-top:8px;">
+          Tip: Download this now — next time upload JSON to skip PDF parsing (fast + no AI cost).
+        </div>
+      </div>
         <div style="text-align:center; margin-bottom:12px;">
           <button class="small-btn" type="button" onclick="setAllGenders('female')">All Female</button>
           <button class="small-btn" type="button" onclick="setAllGenders('male')">All Male</button>
@@ -336,6 +345,10 @@
       hint.textContent = ready
         ? "Downloads JSON (upload it next time to skip PDF parsing)."
         : "Upload a PDF (we convert it) or upload JSON directly.";
+      
+      const voiceBox = document.getElementById("downloadJsonBoxVoice");
+      if (voiceBox) voiceBox.style.display = ready ? "block" : "none";
+
     }
 
     document.getElementById("downloadJsonBtn").addEventListener("click", () => {
