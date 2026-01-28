@@ -67,8 +67,6 @@
 
     .hint { color:#666; margin-top:10px; font-size: 13px; }
 
-    .hidden { display: none; }
-
     .status {
       text-align: center;
       padding: 15px;
@@ -91,12 +89,10 @@
     </div>
 
     <div class="content">
-
-      <!-- Upload -->
       <div id="uploadSection" class="upload-section">
         <h2 style="margin-bottom:14px;">Upload Your Script</h2>
         <p style="margin-bottom:18px; color:#666;">
-          PDF files are converted to <b>script_data.json</b>.  
+          PDF files are converted to <b>script_data.json</b>.
           Uploading JSON directly skips parsing and loads instantly.
         </p>
 
@@ -105,138 +101,12 @@
 
         <p id="fileName" style="margin-top:15px; color:#666;"></p>
 
-        <!-- ALWAYS visible download box -->
+        <!-- Always-visible download -->
         <div id="downloadJsonBox" style="margin-top:16px;">
           <button
             id="downloadJsonBtn"
             class="small-btn"
-            onclick="downloadCurrentJson()"
+            type="button"
             disabled
           >
-            ⬇ Download script_data.json
-          </button>
-          <div id="downloadJsonHint" class="hint">
-            Upload a PDF or JSON first to enable download.
-          </div>
-        </div>
-
-        <div class="hint" style="margin-top:14px;">
-          PDF parsing backend expected at <b>http://localhost:8000</b>
-        </div>
-      </div>
-
-      <div id="status" class="status ready">Waiting for script upload</div>
-    </div>
-  </div>
-
-<script>
-/* ================== CONFIG ================== */
-const API_BASE = "https://scriptv2.onrender.com";
-window.API_BASE = API_BASE;
-
-
-/* ================== STATE ================== */
-let scriptData = null;
-
-/* ================== DOWNLOAD BUTTON LOGIC ================== */
-function updateDownloadButton() {
-  const btn = document.getElementById("downloadJsonBtn");
-  const hint = document.getElementById("downloadJsonHint");
-  const ready = !!scriptData;
-
-  btn.disabled = !ready;
-  btn.style.opacity = ready ? "1" : "0.5";
-
-  hint.textContent = ready
-    ? "This downloads the JSON version of the script (use it next time to skip PDF parsing)."
-    : "Upload a PDF (we convert it) or upload JSON directly.";
-}
-
-/* ================== STATUS ================== */
-function updateStatus(msg, type) {
-  const el = document.getElementById("status");
-  el.textContent = msg;
-  el.className = `status ${type}`;
-}
-
-/* ================== FILE UPLOAD ================== */
-document.getElementById("fileInput").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  scriptData = null;
-  updateDownloadButton();
-
-  const name = file.name.toLowerCase();
-  document.getElementById("fileName").textContent = `Loading ${file.name}...`;
-
-  /* ---- JSON PATH (FAST) ---- */
-  if (name.endsWith(".json")) {
-    updateStatus("Loading JSON…", "playing");
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        scriptData = JSON.parse(evt.target.result);
-        updateStatus("JSON loaded successfully", "ready");
-        document.getElementById("fileName").textContent = `✓ Loaded ${file.name}`;
-        updateDownloadButton();
-      } catch {
-        updateStatus("Invalid JSON file", "error");
-      }
-    };
-    reader.readAsText(file);
-    return;
-  }
-
-  /* ---- PDF PATH (SLOW) ---- */
-  if (name.endsWith(".pdf")) {
-    updateStatus("Uploading & parsing PDF…", "playing");
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/parse-pdf`, {
-        method: "POST",
-        body: formData
-      });
-      const data = await res.json();
-
-      if (!data.ok) throw new Error(data.message);
-
-      scriptData = data.script_data;   // <-- JSON canonical form
-      updateStatus("PDF parsed and converted to JSON", "ready");
-      document.getElementById("fileName").textContent = `✓ Parsed ${file.name}`;
-      updateDownloadButton();
-
-    } catch (err) {
-      updateStatus("PDF parsing failed (backend error)", "error");
-    }
-    return;
-  }
-
-  updateStatus("Unsupported file type", "error");
-});
-
-/* ================== DOWNLOAD JSON ================== */
-function downloadCurrentJson() {
-  if (!scriptData) return;
-
-  const blob = new Blob(
-    [JSON.stringify(scriptData, null, 2)],
-    { type: "application/json" }
-  );
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "script_data.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  URL.revokeObjectURL(url);
-}
-
-/* ================== INIT ================== */
-updateDownloadButton();
-</scr
+            ⬇ Download scrip
