@@ -404,6 +404,8 @@
           document.getElementById('fileName').textContent = `✓ Parsed ${file.name} (${data.total_lines || ""} lines)`;
 
           updateDownloadButton();
+          document.getElementById("downloadJsonHint").innerHTML = " <b>Tip:</b> Download the JSON now so next time you can upload it instantly (skip PDF parsing).";
+
           updateStatus("PDF parsed. Choose voices.", "ready");
 
           showVoicePicker(charactersList);
