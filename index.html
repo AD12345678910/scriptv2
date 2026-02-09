@@ -195,6 +195,22 @@
     }
     .voice-row .name { font-weight: 700; color:#333; }
     .voice-row label { margin-left: 10px; font-size: 14px; cursor:pointer; }
+    .voice-row select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      font-size: 13px;
+    }
+
+    .voice-preview {
+      margin: 10px 0 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .voice-preview button {
+      font-size: 12px;
+    }
 
     .hint { color:#666; margin-top:10px; font-size: 13px; }
 
@@ -239,7 +255,7 @@
   <div class="container">
     <div class="header">
       <h1>🎭 Script Rehearsal Tool</h1>
-      <p>Upload a script PDF (slow) or script_data.json (fast) → choose voices → rehearse</p>
+      <p>Upload a script PDF (slow) or JSON file (fast) → choose voices → rehearse</p>
     </div>
 
     <div class="content">
@@ -247,53 +263,33 @@
       <div id="uploadSection" class="upload-section">
         <h2 style="margin-bottom: 14px;">Upload Your Script</h2>
         <p style="margin-bottom: 18px; color:#666;">
-          Upload a <b>PDF</b> (we’ll parse it) or upload <b>script_data.json</b> directly for faster loading.
+          Upload a <b>PDF</b> (we’ll parse it) or upload a <b>JSON file</b> directly for faster loading.
         </p>
         <input type="file" id="fileInput" accept=".pdf,.json"/>
         <label for="fileInput" class="upload-btn">Choose PDF or JSON</label>
         <p id="fileName" style="margin-top: 15px; color:#666;"></p>
-
-        <!-- ALWAYS visible download -->
-        <div id="downloadJsonBox" class="download-box">
-          <div class="download-label-strong">Power‑user tip: save your script as JSON</div>
-          <button id="downloadJsonBtn" class="download-btn" type="button" disabled>
-            ⬇ Download script_data.json
-          </button>
-          <div id="downloadJsonHint" class="hint" style="margin-top:8px;">
-            Upload a PDF or JSON first to enable download.
-          </div>
-        </div>
-
-        <div class="hint">
-          PDF parsing backend: <b id="backendUrl"></b>
-        </div>
-
-        <div class="hint"><b>BUILD:</b> rehearsal+download+render</div>
       </div>
 
       <!-- Voice selection -->
       <div id="voiceSection" class="voice-section hidden">
         <h2 style="margin-bottom: 10px;">Choose voices</h2>
         <p style="margin-bottom: 15px; color:#666;">
-          Pick a <b>female</b>, <b>male</b>, or <b>non‑binary</b> style voice for each character.
-          Actual sound depends on the voices installed on your device.
+          Preview the available voices, then pick one from the dropdown for each character.
         </p>
         <!-- Download JSON (recommended) -->
         <div id="downloadJsonBoxVoice" class="download-box" style="margin: 10px 0 16px;">
-          <div class="download-label-strong" style="margin-bottom:8px;">Recommended: save this script for next time</div>
+          <div class="download-label-strong" style="margin-bottom:8px;">Save this script for next time</div>
           <button class="download-btn" type="button" onclick="downloadCurrentJson()">
-            ⬇ Download script_data.json (recommended)
+            ⬇ Download script_data.json
           </button>
-          <div class="hint" style="margin-top:8px;">
-            Tip: Download this now — next time upload JSON to skip PDF parsing (fast + no AI cost).
-          </div>
         </div>
-        <div style="text-align:center; margin-bottom:12px;">
-          <button class="small-btn" type="button" onclick="setAllGenders('female')">All Female</button>
-          <button class="small-btn" type="button" onclick="setAllGenders('male')">All Male</button>
-          <button class="small-btn" type="button" onclick="setAllGenders('nonbinary')">All Non‑binary</button>
+
+        <div>
+          <div class="download-label-strong" style="margin-bottom:6px;">Preview device voices</div>
+          <div id="voicePreviewList" class="voice-preview"></div>
         </div>
-        <div id="voiceList"></div>
+
+        <div id="voiceList" style="margin-top: 12px;"></div>
         <div style="margin-top: 15px; text-align:center;">
           <button class="control-btn play-btn" type="button" onclick="confirmVoices()">Continue</button>
         </div>
@@ -360,7 +356,7 @@
     // ====== App State ======
     let scriptData = null;
     let charactersList = [];
-    let characterGender = {}; // { "SELBY": "female", ... }
+    let characterVoiceId = {}; // { "SELBY": "voiceURI-or-name", ... }
     let isPlaying = false;
     let isPaused = false;
     const speechSynthesis = window.speechSynthesis;
@@ -370,7 +366,13 @@
     let currentLineIndex = 0;
 
     // ====== Voices: load asynchronously (browser-dependent) ======
-    function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
+    function loadVoices() {
+      availableVoices = speechSynthesis.getVoices();
+      const voiceSection = document.getElementById('voiceSection');
+      if (voiceSection && !voiceSection.classList.contains('hidden')) {
+        renderVoicePicker();
+      }
+    }
     loadVoices();
     if (speechSynthesis.onvoiceschanged !== undefined) {
       speechSynthesis.onvoiceschanged = loadVoices;
@@ -503,47 +505,76 @@
       document.getElementById('mainSection').classList.add('hidden');
       document.getElementById('voiceSection').classList.remove('hidden');
 
-      characters.forEach(c => { if (!characterGender[c]) characterGender[c] = "female"; });
       renderVoicePicker();
       updateStatus("Choose voices, then continue.", "ready");
     }
 
     function renderVoicePicker() {
+      const previewEl = document.getElementById("voicePreviewList");
       const list = document.getElementById("voiceList");
+      if (!previewEl || !list) return;
+
+      const usableVoices = getUsableVoices();
+      previewEl.innerHTML = "";
       list.innerHTML = "";
 
+      if (usableVoices.length === 0) {
+        previewEl.textContent = "No speech voices available in this browser.";
+        return;
+      }
+
+      // Voice preview buttons
+      usableVoices.forEach((voice, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "small-btn";
+        const label = voice.name || `Voice ${idx + 1}`;
+        btn.textContent = `Voice ${idx + 1}: ${label}`;
+        btn.addEventListener("click", () => {
+          playPreviewVoice(voice);
+        });
+        previewEl.appendChild(btn);
+      });
+
+      // Default assignments if not set: cycle through the usable voices
+      charactersList.forEach((c, index) => {
+        if (!characterVoiceId[c]) {
+          const v = usableVoices[index % usableVoices.length];
+          characterVoiceId[c] = v.voiceURI || v.name || "";
+        }
+      });
+
+      // Per‑character dropdowns
       charactersList.forEach(c => {
         const row = document.createElement("div");
         row.className = "voice-row";
+        const selectId = `voice-select-${escapeAttr(c)}`;
+
+        const optionsHtml = usableVoices.map((voice, idx) => {
+          const id = voice.voiceURI || voice.name || String(idx);
+          const isSelected = characterVoiceId[c] === id;
+          const label = voice.name || `Voice ${idx + 1}`;
+          return `<option value="${escapeAttr(id)}" ${isSelected ? "selected" : ""}>Voice ${idx + 1}: ${escapeHtml(label)}</option>`;
+        }).join("");
+
         row.innerHTML = `
           <div class="name">${escapeHtml(c)}</div>
           <div>
-            <label>
-              <input type="radio" name="gender-${escapeAttr(c)}" value="female" ${characterGender[c]==="female" ? "checked" : ""}>
-              Female
-            </label>
-            <label>
-              <input type="radio" name="gender-${escapeAttr(c)}" value="male" ${characterGender[c]==="male" ? "checked" : ""}>
-              Male
-            </label>
-            <label>
-              <input type="radio" name="gender-${escapeAttr(c)}" value="nonbinary" ${characterGender[c]==="nonbinary" ? "checked" : ""}>
-              Non-binary
-            </label>
+            <select id="${selectId}">
+              ${optionsHtml}
+            </select>
           </div>
         `;
 
-        row.querySelectorAll(`input[name="gender-${escapeAttr(c)}"]`).forEach(r => {
-          r.addEventListener("change", (e) => { characterGender[c] = e.target.value; });
-        });
+        const selectEl = row.querySelector("select");
+        if (selectEl) {
+          selectEl.addEventListener("change", (e) => {
+            characterVoiceId[c] = e.target.value;
+          });
+        }
 
         list.appendChild(row);
       });
-    }
-
-    function setAllGenders(g) {
-      charactersList.forEach(c => characterGender[c] = g);
-      renderVoicePicker();
     }
 
     function confirmVoices() {
@@ -738,6 +769,24 @@
     }
 
     // ====== Pick voice ======
+    function getUsableVoices() {
+      const voices = (availableVoices && availableVoices.length)
+        ? availableVoices
+        : speechSynthesis.getVoices() || [];
+
+      const en = voices.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
+      return en.length ? en : voices;
+    }
+
+    function playPreviewVoice(voice) {
+      if (!voice) return;
+      const utterance = new SpeechSynthesisUtterance("Hi, how are you doing?");
+      utterance.voice = voice;
+      utterance.rate = 1.0;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utterance);
+    }
+
     function pickVoiceForGender(gender) {
       const voices = (availableVoices && availableVoices.length) ? availableVoices : speechSynthesis.getVoices();
       if (!voices || voices.length === 0) return null;
@@ -775,8 +824,20 @@
         const speed = parseFloat(document.getElementById('speedSlider').value);
         currentUtterance.rate = speed;
 
-        const gender = characterGender[character] || "female";
-        const voice = pickVoiceForGender(gender);
+        const usableVoices = getUsableVoices();
+        let voice = null;
+        if (usableVoices.length) {
+          const id = characterVoiceId[character];
+          if (id) {
+            voice = usableVoices.find(v => (v.voiceURI || v.name || "") === id) || null;
+          }
+          if (!voice) {
+            voice = usableVoices[0];
+          }
+        } else {
+          voice = pickVoiceForGender("female");
+        }
+
         if (voice) currentUtterance.voice = voice;
 
         currentUtterance.onend = () => { currentUtterance = null; resolve(); };
