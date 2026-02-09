@@ -542,11 +542,13 @@
       }
 
       // Voice preview buttons
+      // Note: Voice names come from the browser's Web Speech API (system-provided)
+      // Each browser/OS exposes different voices (e.g., "Samantha" on macOS, "Microsoft Zira" on Windows)
       usableVoices.forEach((voice, idx) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "small-btn";
-        const label = voice.name || `Voice ${idx + 1}`;
+        const label = voice.name || `Voice ${idx + 1}`; // voice.name is provided by the system
         btn.textContent = `Voice ${idx + 1}: ${label}`;
         btn.addEventListener("click", () => {
           playPreviewVoice(voice);
@@ -555,10 +557,15 @@
       });
 
       // Default assignments if not set: cycle through the usable voices
+      // This distributes voices evenly across characters (e.g., char 1 gets voice 0, char 2 gets voice 1, etc.)
       charactersList.forEach((c, index) => {
         if (!characterVoiceId[c]) {
           const v = usableVoices[index % usableVoices.length];
           characterVoiceId[c] = v._scriptVoiceId;
+          // Also store the name for cross-system compatibility
+          if (v.name) {
+            characterVoiceId[c + "_name"] = v.name;
+          }
         }
       });
 
@@ -587,7 +594,17 @@
         const selectEl = row.querySelector("select");
         if (selectEl) {
           selectEl.addEventListener("change", (e) => {
-            characterVoiceId[c] = e.target.value;
+            // Store both the ID and the voice name for cross-system compatibility
+            const selectedVoice = usableVoices.find(v => v._scriptVoiceId === e.target.value);
+            if (selectedVoice) {
+              characterVoiceId[c] = e.target.value;
+              // Also store the name as a backup identifier (more portable across systems)
+              if (selectedVoice.name) {
+                characterVoiceId[c + "_name"] = selectedVoice.name;
+              }
+            } else {
+              characterVoiceId[c] = e.target.value;
+            }
           });
         }
 
@@ -738,7 +755,10 @@
           await speakLine(item.text, item.character);
         } else {
           const words = item.text.split(/\s+/).filter(Boolean).length;
-          const pauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
+          const speed = parseFloat(document.getElementById('speedSlider').value);
+          // Pause time scales with speed: at 2x speed, pauses are half as long
+          const basePauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
+          const pauseTime = Math.round(basePauseTime / speed);
           await sleep(pauseTime);
         }
 
@@ -857,9 +877,31 @@
         let voice = null;
         if (usableVoices.length) {
           const id = characterVoiceId[character];
+          const storedName = characterVoiceId[character + "_name"]; // Backup identifier stored when voice was selected
+          
           if (id) {
+            // Try multiple matching strategies for cross-system compatibility:
+            // 1. Exact match by _scriptVoiceId (works if same system/browser)
             voice = usableVoices.find(v => v._scriptVoiceId === id) || null;
+            
+            // 2. If that fails and we have a stored name, try matching by name (case-insensitive)
+            // This handles cases where "Samantha" exists on different systems but with different IDs/URIs
+            if (!voice && storedName) {
+              voice = usableVoices.find(v => 
+                v.name && v.name.toLowerCase() === storedName.toLowerCase()
+              ) || null;
+            }
+            
+            // 3. If still no match, try partial name matching (handles variations like "Samantha" vs "Samantha (Enhanced)")
+            if (!voice && storedName) {
+              const nameLower = storedName.toLowerCase();
+              voice = usableVoices.find(v => 
+                v.name && v.name.toLowerCase().includes(nameLower) || 
+                nameLower.includes(v.name.toLowerCase())
+              ) || null;
+            }
           }
+          // Fallback to first available voice if lookup failed
           if (!voice) {
             voice = usableVoices[0];
           }
