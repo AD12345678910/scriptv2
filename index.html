@@ -279,9 +279,12 @@
         <!-- Download JSON (recommended) -->
         <div id="downloadJsonBoxVoice" class="download-box" style="margin: 10px 0 16px;">
           <div class="download-label-strong" style="margin-bottom:8px;">Save this script for next time</div>
-          <button class="download-btn" type="button" onclick="downloadCurrentJson()">
+          <button id="downloadJsonBtn" class="download-btn" type="button">
             ⬇ Download script_data.json
           </button>
+          <div id="downloadJsonHint" class="hint" style="margin-top:8px;">
+            Upload a script first to enable download.
+          </div>
         </div>
 
         <div>
@@ -351,7 +354,10 @@
     // ====== Config ======
     const API_BASE = "https://scriptv2.onrender.com";
     window.API_BASE = API_BASE;
-    document.getElementById("backendUrl").textContent = API_BASE;
+    const backendEl = document.getElementById("backendUrl");
+    if (backendEl) {
+      backendEl.textContent = API_BASE;
+    }
 
     // ====== App State ======
     let scriptData = null;
@@ -400,22 +406,31 @@
     function updateDownloadButton() {
       const btn = document.getElementById("downloadJsonBtn");
       const hint = document.getElementById("downloadJsonHint");
+      const voiceBox = document.getElementById("downloadJsonBoxVoice");
       const ready = !!scriptData;
 
-      btn.disabled = !ready;
-      btn.style.opacity = ready ? "1" : "0.5";
-      hint.textContent = ready
-        ? "Downloads JSON (upload it next time to skip PDF parsing)."
-        : "Upload a PDF (we convert it) or upload JSON directly.";
-      
-      const voiceBox = document.getElementById("downloadJsonBoxVoice");
-      if (voiceBox) voiceBox.style.display = ready ? "block" : "none";
+      if (btn) {
+        btn.disabled = !ready;
+        btn.style.opacity = ready ? "1" : "0.5";
+      }
+      if (hint) {
+        hint.textContent = ready
+          ? "Downloads JSON (upload it next time for faster rehearsal)."
+          : "Upload a PDF or JSON file first to enable download.";
+      }
+      if (voiceBox) {
+        // Only show the JSON download box on the voice screen once script data is ready.
+        voiceBox.style.display = ready ? "block" : "none";
+      }
     }
 
-    document.getElementById("downloadJsonBtn").addEventListener("click", () => {
-      if (!scriptData) return;
-      downloadCurrentJson();
-    });
+    const downloadBtnEl = document.getElementById("downloadJsonBtn");
+    if (downloadBtnEl) {
+      downloadBtnEl.addEventListener("click", () => {
+        if (!scriptData) return;
+        downloadCurrentJson();
+      });
+    }
 
     // ====== Upload handler: accept PDF or JSON ======
     document.getElementById('fileInput').addEventListener('change', async function(e) {
@@ -478,7 +493,10 @@
           document.getElementById('fileName').textContent = `✓ Parsed ${file.name} (${data.total_lines || ""} lines)`;
 
           updateDownloadButton();
-          document.getElementById("downloadJsonHint").innerHTML = " <b>Tip:</b> Download the JSON now so next time you can upload it instantly (skip PDF parsing).";
+          const downloadJsonHintEl = document.getElementById("downloadJsonHint");
+          if (downloadJsonHintEl) {
+            downloadJsonHintEl.innerHTML = " <b>Tip:</b> Download the JSON now so next time you can upload it instantly (skip PDF parsing).";
+          }
 
           updateStatus("PDF parsed. Choose voices.", "ready");
 
@@ -540,7 +558,7 @@
       charactersList.forEach((c, index) => {
         if (!characterVoiceId[c]) {
           const v = usableVoices[index % usableVoices.length];
-          characterVoiceId[c] = v.voiceURI || v.name || "";
+          characterVoiceId[c] = v._scriptVoiceId;
         }
       });
 
@@ -551,7 +569,7 @@
         const selectId = `voice-select-${escapeAttr(c)}`;
 
         const optionsHtml = usableVoices.map((voice, idx) => {
-          const id = voice.voiceURI || voice.name || String(idx);
+          const id = voice._scriptVoiceId;
           const isSelected = characterVoiceId[c] === id;
           const label = voice.name || `Voice ${idx + 1}`;
           return `<option value="${escapeAttr(id)}" ${isSelected ? "selected" : ""}>Voice ${idx + 1}: ${escapeHtml(label)}</option>`;
@@ -694,12 +712,12 @@
       const totalLines = playbackTimeline.length;
 
       while (isPlaying && currentLineIndex < totalLines) {
-        const i = currentLineIndex;
-        const item = playbackTimeline[i];
-        const prevSceneNumber = i > 0 ? playbackTimeline[i - 1].sceneNumber : null;
+        const startIndex = currentLineIndex;
+        const item = playbackTimeline[startIndex];
+        const prevSceneNumber = startIndex > 0 ? playbackTimeline[startIndex - 1].sceneNumber : null;
 
         // If we jumped scenes or are at the very first line, show a scene header
-        if (i === 0 || item.sceneNumber !== prevSceneNumber) {
+        if (startIndex === 0 || item.sceneNumber !== prevSceneNumber) {
           updateLineDisplay(`Scene ${item.sceneNumber}`, item.sceneTitle);
           updateStatus(`Starting Scene ${item.sceneNumber}`, 'playing');
           await sleep(1500);
@@ -713,8 +731,8 @@
         if (!isPlaying) break;
 
         updateLineDisplay(item.character, item.text);
-        updateStatus(`Scene ${item.sceneNumber} | Line ${i + 1}/${totalLines}`, 'playing');
-        timelineSlider.value = String(i);
+        updateStatus(`Scene ${item.sceneNumber} | Line ${startIndex + 1}/${totalLines}`, 'playing');
+        timelineSlider.value = String(startIndex);
 
         if (selectedCharacters.has(item.character)) {
           await speakLine(item.text, item.character);
@@ -725,7 +743,11 @@
         }
 
         if (!isPlaying) break;
-        currentLineIndex = i + 1;
+
+        // If the user has not moved the slider to a new position, advance sequentially.
+        if (currentLineIndex === startIndex) {
+          currentLineIndex = startIndex + 1;
+        }
       }
 
       if (isPlaying) updateStatus('Rehearsal complete!', 'complete');
@@ -773,6 +795,13 @@
       const voices = (availableVoices && availableVoices.length)
         ? availableVoices
         : speechSynthesis.getVoices() || [];
+
+      // Ensure each voice has a stable internal ID we can use everywhere
+      voices.forEach((v, idx) => {
+        if (!v._scriptVoiceId) {
+          v._scriptVoiceId = v.voiceURI || v.name || `voice-${idx}`;
+        }
+      });
 
       const en = voices.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
       return en.length ? en : voices;
@@ -829,7 +858,7 @@
         if (usableVoices.length) {
           const id = characterVoiceId[character];
           if (id) {
-            voice = usableVoices.find(v => (v.voiceURI || v.name || "") === id) || null;
+            voice = usableVoices.find(v => v._scriptVoiceId === id) || null;
           }
           if (!voice) {
             voice = usableVoices[0];
