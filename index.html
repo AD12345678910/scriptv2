@@ -147,6 +147,18 @@
     .stop-btn:hover:not(:disabled) { background:#da190b; transform: translateY(-2px); }
     .control-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
+    .pause-btn { background:#ff9800; color:white; }
+    .pause-btn:hover:not(:disabled) { background:#fb8c00; transform: translateY(-2px); }
+
+    .timeline {
+      margin: 0 auto 20px;
+      max-width: 500px;
+      text-align: center;
+    }
+    .timeline input[type="range"] {
+      width: 100%;
+    }
+
     .line-display {
       background: #f5f5f5;
       border: 2px solid #e0e0e0;
@@ -185,6 +197,41 @@
     .voice-row label { margin-left: 10px; font-size: 14px; cursor:pointer; }
 
     .hint { color:#666; margin-top:10px; font-size: 13px; }
+
+    /* Download JSON emphasis */
+    .download-box {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-radius: 12px;
+      border: 2px dashed #667eea;
+      background: #eef2ff;
+    }
+    .download-btn {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+      padding: 10px 26px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(102,126,234,0.25);
+      transition: all 0.25s ease;
+    }
+    .download-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .download-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: #667eea;
+      color: white;
+    }
+    .download-label-strong {
+      font-weight: 700;
+      color: #4338ca;
+    }
   </style>
 </head>
 
@@ -207,8 +254,9 @@
         <p id="fileName" style="margin-top: 15px; color:#666;"></p>
 
         <!-- ALWAYS visible download -->
-        <div id="downloadJsonBox" style="margin-top:16px;">
-          <button id="downloadJsonBtn" class="small-btn" type="button" disabled>
+        <div id="downloadJsonBox" class="download-box">
+          <div class="download-label-strong">Power‑user tip: save your script as JSON</div>
+          <button id="downloadJsonBtn" class="download-btn" type="button" disabled>
             ⬇ Download script_data.json
           </button>
           <div id="downloadJsonHint" class="hint" style="margin-top:8px;">
@@ -227,20 +275,23 @@
       <div id="voiceSection" class="voice-section hidden">
         <h2 style="margin-bottom: 10px;">Choose voices</h2>
         <p style="margin-bottom: 15px; color:#666;">
-          Pick male/female for each character. (Your device’s available voices vary.)
+          Pick a <b>female</b>, <b>male</b>, or <b>non‑binary</b> style voice for each character.
+          Actual sound depends on the voices installed on your device.
         </p>
         <!-- Download JSON (recommended) -->
-      <div id="downloadJsonBoxVoice" style="margin: 10px 0 16px; text-align:center;">
-        <button class="small-btn" type="button" onclick="downloadCurrentJson()">
-          ⬇ Download script_data.json (recommended)
-        </button>
-        <div class="hint" style="margin-top:8px;">
-          Tip: Download this now — next time upload JSON to skip PDF parsing (fast + no AI cost).
+        <div id="downloadJsonBoxVoice" class="download-box" style="margin: 10px 0 16px;">
+          <div class="download-label-strong" style="margin-bottom:8px;">Recommended: save this script for next time</div>
+          <button class="download-btn" type="button" onclick="downloadCurrentJson()">
+            ⬇ Download script_data.json (recommended)
+          </button>
+          <div class="hint" style="margin-top:8px;">
+            Tip: Download this now — next time upload JSON to skip PDF parsing (fast + no AI cost).
+          </div>
         </div>
-      </div>
         <div style="text-align:center; margin-bottom:12px;">
           <button class="small-btn" type="button" onclick="setAllGenders('female')">All Female</button>
           <button class="small-btn" type="button" onclick="setAllGenders('male')">All Male</button>
+          <button class="small-btn" type="button" onclick="setAllGenders('nonbinary')">All Non‑binary</button>
         </div>
         <div id="voiceList"></div>
         <div style="margin-top: 15px; text-align:center;">
@@ -282,7 +333,13 @@
 
         <div class="controls">
           <button class="control-btn play-btn" id="playBtn" type="button" onclick="startRehearsal()">▶ Start Rehearsal</button>
+          <button class="control-btn pause-btn" id="pauseBtn" type="button" onclick="togglePause()" disabled>⏸ Pause</button>
           <button class="control-btn stop-btn" id="stopBtn" type="button" onclick="stopRehearsal()" disabled>⏹ Stop</button>
+        </div>
+
+        <div class="timeline">
+          <input type="range" id="timelineSlider" min="0" value="0" step="1" disabled />
+          <div class="hint" id="timelineHint">Use the slider to jump to a specific point in your selected scenes.</div>
         </div>
 
         <div class="status ready" id="status">Ready to rehearse</div>
@@ -305,9 +362,12 @@
     let charactersList = [];
     let characterGender = {}; // { "SELBY": "female", ... }
     let isPlaying = false;
+    let isPaused = false;
     const speechSynthesis = window.speechSynthesis;
     let currentUtterance = null;
     let availableVoices = [];
+    let playbackTimeline = []; // flattened list of lines across selected scenes
+    let currentLineIndex = 0;
 
     // ====== Voices: load asynchronously (browser-dependent) ======
     function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
@@ -348,7 +408,6 @@
       
       const voiceBox = document.getElementById("downloadJsonBoxVoice");
       if (voiceBox) voiceBox.style.display = ready ? "block" : "none";
-
     }
 
     document.getElementById("downloadJsonBtn").addEventListener("click", () => {
@@ -467,6 +526,10 @@
               <input type="radio" name="gender-${escapeAttr(c)}" value="male" ${characterGender[c]==="male" ? "checked" : ""}>
               Male
             </label>
+            <label>
+              <input type="radio" name="gender-${escapeAttr(c)}" value="nonbinary" ${characterGender[c]==="nonbinary" ? "checked" : ""}>
+              Non-binary
+            </label>
           </div>
         `;
 
@@ -563,40 +626,75 @@
         Array.from(document.querySelectorAll('#characterCheckboxes input:checked')).map(cb => cb.value)
       );
 
+      // Build flat playback timeline for slider + seeking
+      const scenesToPlay = scriptData.scenes.filter(scene => selectedScenes.includes(String(scene.scene_number)));
+      playbackTimeline = [];
+      scenesToPlay.forEach(scene => {
+        (scene.lines || []).forEach(lineData => {
+          playbackTimeline.push({
+            sceneNumber: String(scene.scene_number ?? ""),
+            sceneTitle: String(scene.scene_title ?? ""),
+            character: String(lineData.character ?? ""),
+            text: String(lineData.line ?? "")
+          });
+        });
+      });
+
+      if (playbackTimeline.length === 0) {
+        updateStatus('No lines found in selected scenes.', 'error');
+        return;
+      }
+
+      const timelineSlider = document.getElementById('timelineSlider');
+      timelineSlider.max = String(Math.max(playbackTimeline.length - 1, 0));
+      timelineSlider.disabled = false;
+
+      // allow user to pre‑select a starting point before pressing play
+      currentLineIndex = Number(timelineSlider.value) || 0;
+      currentLineIndex = Math.min(Math.max(currentLineIndex, 0), playbackTimeline.length - 1);
+
       isPlaying = true;
+      isPaused = false;
       document.getElementById('playBtn').disabled = true;
+      document.getElementById('pauseBtn').disabled = false;
+      document.getElementById('pauseBtn').textContent = '⏸ Pause';
       document.getElementById('stopBtn').disabled = false;
 
-      const scenesToPlay = scriptData.scenes.filter(scene => selectedScenes.includes(String(scene.scene_number)));
+      const totalLines = playbackTimeline.length;
 
-      let lineCounter = 0;
-      const totalLines = scenesToPlay.reduce((sum, scene) => sum + (scene.lines || []).length, 0);
+      while (isPlaying && currentLineIndex < totalLines) {
+        const i = currentLineIndex;
+        const item = playbackTimeline[i];
+        const prevSceneNumber = i > 0 ? playbackTimeline[i - 1].sceneNumber : null;
 
-      for (const scene of scenesToPlay) {
+        // If we jumped scenes or are at the very first line, show a scene header
+        if (i === 0 || item.sceneNumber !== prevSceneNumber) {
+          updateLineDisplay(`Scene ${item.sceneNumber}`, item.sceneTitle);
+          updateStatus(`Starting Scene ${item.sceneNumber}`, 'playing');
+          await sleep(1500);
+          if (!isPlaying) break;
+        }
+
+        // Wait here while paused (between lines)
+        while (isPlaying && isPaused) {
+          await sleep(200);
+        }
         if (!isPlaying) break;
 
-        updateLineDisplay(`Scene ${scene.scene_number}`, scene.scene_title);
-        updateStatus(`Starting Scene ${scene.scene_number}`, 'playing');
-        await sleep(1500);
+        updateLineDisplay(item.character, item.text);
+        updateStatus(`Scene ${item.sceneNumber} | Line ${i + 1}/${totalLines}`, 'playing');
+        timelineSlider.value = String(i);
 
-        for (const lineData of (scene.lines || [])) {
-          if (!isPlaying) break;
-
-          lineCounter++;
-          const ch = String(lineData.character ?? "");
-          const ln = String(lineData.line ?? "");
-
-          updateLineDisplay(ch, ln);
-          updateStatus(`Scene ${scene.scene_number} | Line ${lineCounter}/${totalLines}`, 'playing');
-
-          if (selectedCharacters.has(ch)) {
-            await speakLine(ln, ch);
-          } else {
-            const words = ln.split(/\s+/).filter(Boolean).length;
-            const pauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
-            await sleep(pauseTime);
-          }
+        if (selectedCharacters.has(item.character)) {
+          await speakLine(item.text, item.character);
+        } else {
+          const words = item.text.split(/\s+/).filter(Boolean).length;
+          const pauseTime = Math.max(Math.round((words / 3.0) * 1000), 1000);
+          await sleep(pauseTime);
         }
+
+        if (!isPlaying) break;
+        currentLineIndex = i + 1;
       }
 
       if (isPlaying) updateStatus('Rehearsal complete!', 'complete');
@@ -607,7 +705,13 @@
 
     function stopRehearsal() {
       isPlaying = false;
+      isPaused = false;
       document.getElementById('playBtn').disabled = false;
+      const pauseBtn = document.getElementById('pauseBtn');
+      if (pauseBtn) {
+        pauseBtn.disabled = true;
+        pauseBtn.textContent = '⏸ Pause';
+      }
       document.getElementById('stopBtn').disabled = true;
 
       if (currentUtterance) {
@@ -616,20 +720,51 @@
       }
     }
 
+    function togglePause() {
+      if (!isPlaying) return;
+      const btn = document.getElementById('pauseBtn');
+      if (!btn) return;
+
+      if (!isPaused) {
+        isPaused = true;
+        try { speechSynthesis.pause(); } catch (e) {}
+        btn.textContent = '▶ Resume';
+        updateStatus('Paused', 'playing');
+      } else {
+        isPaused = false;
+        try { speechSynthesis.resume(); } catch (e) {}
+        btn.textContent = '⏸ Pause';
+      }
+    }
+
     // ====== Pick voice ======
     function pickVoiceForGender(gender) {
       const voices = (availableVoices && availableVoices.length) ? availableVoices : speechSynthesis.getVoices();
       if (!voices || voices.length === 0) return null;
 
-      const keyword = (gender === "female") ? "female" : "male";
-      const explicit = voices.find(v => (v.name || "").toLowerCase().includes(keyword));
-      if (explicit) return explicit;
-
       const en = voices.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
       const pool = en.length ? en : voices;
 
-      if (gender === "female") return pool[0] || voices[0];
-      return pool[1] || pool[0] || voices[0];
+      // Try to infer groupings based on common name patterns
+      const femaleCandidates = pool.filter(v =>
+        /(female|woman|girl|susan|victoria|samantha|allison|amy)/i.test(v.name || "")
+      );
+      const maleCandidates = pool.filter(v =>
+        /(male|man|boy|alex|daniel|david|fred|george)/i.test(v.name || "")
+      );
+      const neutralCandidates = pool.filter(v =>
+        !femaleCandidates.includes(v) && !maleCandidates.includes(v)
+      );
+
+      if (gender === "female") {
+        return femaleCandidates[0] || pool[0] || voices[0];
+      }
+      if (gender === "male") {
+        return maleCandidates[0] || pool[1] || pool[0] || voices[0];
+      }
+      // non-binary: prefer something that isn't strongly male/female-labelled,
+      // otherwise just pick a third distinct option if available.
+      return neutralCandidates[0] || pool[2] || pool[1] || pool[0] || voices[0];
     }
 
     function speakLine(text, character) {
@@ -654,17 +789,21 @@
     // ====== Sleep ======
     function sleep(ms) {
       return new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (!isPlaying) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 100);
+        let remaining = ms;
+        const step = 100;
 
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          resolve();
-        }, ms);
+        function tick() {
+          if (!isPlaying) return resolve();
+          if (isPaused) {
+            setTimeout(tick, step);
+            return;
+          }
+          if (remaining <= 0) return resolve();
+          remaining -= step;
+          setTimeout(tick, step);
+        }
+
+        tick();
       });
     }
 
@@ -708,6 +847,24 @@
       a.remove();
 
       URL.revokeObjectURL(url);
+    }
+
+    // ====== Timeline slider behaviour ======
+    const timelineSliderEl = document.getElementById('timelineSlider');
+    if (timelineSliderEl) {
+      timelineSliderEl.addEventListener('input', (e) => {
+        if (!playbackTimeline || playbackTimeline.length === 0) return;
+        const idx = Number(e.target.value) || 0;
+        currentLineIndex = Math.min(Math.max(idx, 0), playbackTimeline.length - 1);
+
+        // If we're not currently playing, update the preview text immediately
+        if (!isPlaying) {
+          const item = playbackTimeline[currentLineIndex];
+          if (item) {
+            updateLineDisplay(item.character, item.text);
+          }
+        }
+      });
     }
 
     // init
