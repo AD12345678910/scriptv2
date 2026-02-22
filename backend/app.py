@@ -16,8 +16,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://ad12345678910.github.io",
-        "https://ad12345678910.github.io/scriptv2",
-        "https://ad12345678910.github.io/scriptv2/",
         "http://localhost:5500",
         "http://127.0.0.1:5500",
         "http://localhost:8000",
