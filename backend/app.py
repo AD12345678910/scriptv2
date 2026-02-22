@@ -94,6 +94,7 @@ Return ONLY a JSON object in this format (no extra commentary):
 Rules:
 - Only include spoken dialogue (no stage directions).
 - Character names should be consistent and uppercase if possible.
+- Be careful about punctuation and spacing. Sentences should be properly punctuated. When a sentence ends, it should be punctuated and the next sentence should start after a space.
 
 SCRIPT:
 {clipped}
